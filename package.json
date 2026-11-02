@@ -1,0 +1,9 @@
+{
+  "name": "apploy-probe",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Small no-dependency platform diagnostics for personal hosting tests",
+  "engines": { "node": ">=20" },
+  "scripts": { "start": "node server.mjs" }
+}

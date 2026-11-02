@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex,nofollow" />
+<title>Apploy Probe — проверка хостинга</title>
+<style>
+:root {font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; color:#e7eaf1;background:#10141e; color-scheme:dark}*{box-sizing:border-box}body{margin:0;padding:24px}main{max-width:940px;margin:auto}h1{font-size:clamp(28px,4vw,40px);margin-bottom:6px}.sub{color:#aebad1;line-height:1.55}.panel{background:#1b2331;border:1px solid #323e52;border-radius:15px;padding:18px;margin-top:16px}label{display:block;margin-bottom:8px;font-weight:600}input{width:100%;border:1px solid #4a5873;background:#101726;color:white;border-radius:8px;padding:12px;font-size:16px}button{padding:11px 15px;border:0;background:#4477f6;border-radius:9px;color:#fff;font-weight:600;cursor:pointer;margin:5px 5px 5px 0}button.secondary{background:#303d55}button:hover{filter:brightness(1.15)}button:disabled{opacity:.5;cursor:wait}.hint{font-size:14px;color:#aebad1;line-height:1.5}.pill{padding:4px 9px;background:#27354b;border-radius:7px;font-size:13px}pre{white-space:pre-wrap;word-break:break-word;max-height:60vh;overflow:auto;background:#0e1522;border:1px solid #31415a;border-radius:10px;padding:14px;font-size:12px}#status{font-weight:600;margin-top:10px}a{color:#a6c0ff}ol{line-height:1.75}
+</style>
+</head>
+<body><main>
+<h1>🔬 Apploy Probe</h1>
+<div class="sub">Технический мини-сайт для проверки бесплатного хостинга. Не собирает заявки клиентов, не отправляет их в Битрикс и не хранит введённые данные. Всё тестирование запускается вручную.</div>
+<div class="panel">
+<label for="token">DIAG_TOKEN (секрет из настроек сервиса)</label>
+<input id="token" type="password" autocomplete="off" placeholder="Введи секрет, который указал на хостинге" />
+<p class="hint">Токен существует только в памяти открытой вкладки. Не вставляй его в отчёт или скриншоты. Не используй здесь настоящий webhook или ключи Битрикса.</p>
+</div>
+<div class="panel">
+<h2>Проверки</h2>
+<button data-test="server">1. Сервер, память, запуск</button>
+<button data-test="network">2. DNS, внешний IP, HTTPS и POST</button>
+<button data-test="echo">3. Тестовая отправка формы</button>
+<button data-test="latency">4. Задержки: 20 запросов</button>
+<button data-test="idle">5. Проверка после простоя</button>
+<p class="hint">Для проверки засыпания: сначала нажми «Сервер», оставь вкладку без запросов на 20–30 минут, затем нажми «Проверка после простоя». Смотри изменение bootId, uptimeSeconds и задержку первого запроса. Чтобы сравнить скорость из России, открой этот сайт на российском мобильном интернете и повтори тест.</p>
+<div id="status" role="status">Готов к тестированию</div>
+</div>
+<div class="panel">
+<h2>Отчёт</h2>
+<button class="secondary" id="download">Скачать JSON для ChatGPT</button>
+<button class="secondary" id="copy">Скопировать JSON</button>
+<button class="secondary" id="clear">Очистить результаты</button>
+<pre id="output">Нажми одну из кнопок проверки.</pre>
+</div>
+<p class="hint">Важно: IP-адрес позволяет лишь приблизительно определить сетевого оператора и географию. Для подтверждения физического расположения серверов, соблюдения требований 152-ФЗ, условий коммерческого использования и SLA потребуется информация от Apploy. 20 успешных запросов не доказывают надёжность работы 24/7.</p>
+</main>
+<script>
+const state={meta:{generatedBy:'apploy-probe-1.0.0',testedFrom:'browser-user-location-not-recorded',pageHost:location.host},tests:[]};
+const $=id=>document.getElementById(id);
+function render(){ $('output').textContent=JSON.stringify(state,null,2); }
+function setStatus(t){$('status').textContent=t;}
+async function api(path, method='GET', body){
+  const token=$('token').value.trim(); if(!token) throw new Error('Введи DIAG_TOKEN');
+  const s=performance.now();
+  const r=await fetch(path,{method,headers:{Authorization:`Bearer ${token}`,...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined,cache:'no-store',signal:AbortSignal.timeout(16000)});
+  const text=await r.text(); let data;try{data=JSON.parse(text)}catch{data={raw:text.slice(0,300)}}
+  const ms=Math.round(performance.now()-s);
+  if(!r.ok)throw new Error(`${r.status}: ${JSON.stringify(data)}`);
+  return {ms,data};
+}
+function stats(values){const s=[...values].sort((a,b)=>a-b);const percentile=(p)=>s[Math.min(s.length-1,Math.ceil(p*s.length)-1)];return {minMs:s[0],medianMs:percentile(.5),p95Ms:percentile(.95),maxMs:s[s.length-1]};}
+async function run(which){
+  setStatus('Выполняю: '+which);document.querySelectorAll('[data-test]').forEach(b=>b.disabled=true);
+  const entry={name:which,at:new Date().toISOString()};
+  try{
+    if(which==='server')entry.result=await api('/api/server');
+    if(which==='network')entry.result=await api('/api/network');
+    if(which==='echo')entry.result=await api('/api/echo','POST',{Name:'TEST ONLY',Phone:'0000000000',source:'diagnostic'});
+    if(which==='idle')entry.result=await api('/api/ping');
+    if(which==='latency'){
+      const results=[];
+      for(let i=0;i<20;i++){
+        try{const r=await api('/api/ping');results.push({ms:r.ms,bootId:r.data.bootId})}
+        catch(err){results.push({error:String(err.message).slice(0,120)})}
+      }
+      const good=results.filter(x=>typeof x.ms==='number');
+      entry.result={total:results.length,success:good.length,failures:results.length-good.length,stats:good.length?stats(good.map(x=>x.ms)):null,uniqueBootIds:[...new Set(good.map(x=>x.bootId))],samples:results};
+    }
+    setStatus('Готово: '+which);
+  }catch(e){entry.error=String(e.message).slice(0,300);setStatus('Ошибка: '+entry.error)}
+  state.tests.push(entry);render();document.querySelectorAll('[data-test]').forEach(b=>b.disabled=false);
+}
+document.querySelectorAll('[data-test]').forEach(b=>b.onclick=()=>run(b.dataset.test));
+$('download').onclick=()=>{const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});const u=URL.createObjectURL(blob);const a=document.createElement('a');a.href=u;a.download='apploy-report.json';a.click();URL.revokeObjectURL(u)};
+$('copy').onclick=async()=>{try{await navigator.clipboard.writeText(JSON.stringify(state,null,2));setStatus('Отчёт скопирован')}catch{setStatus('Не удалось скопировать: используй «Скачать JSON»')}};
+$('clear').onclick=()=>{state.tests=[];render();setStatus('Результаты очищены')};
+</script></body></html>
