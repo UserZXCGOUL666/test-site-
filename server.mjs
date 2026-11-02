@@ -11,7 +11,11 @@ const bootedAt = new Date().toISOString();
 const bootId = crypto.randomUUID();
 const start = performance.now();
 const PORT = Number(process.env.PORT || 3000);
-const DIAG_TOKEN = process.env.DIAG_TOKEN || '';
+// For this temporary diagnostics app, generate a private token when the platform
+// does not offer a documented environment-variable editor. It is printed once
+// to private application logs. Do not use this pattern for production secrets.
+const generatedToken = !process.env.DIAG_TOKEN;
+const DIAG_TOKEN = process.env.DIAG_TOKEN || crypto.randomBytes(24).toString('hex');
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
 const indexHtml = await fs.readFile(path.join(rootDir, 'public', 'index.html'));
 
@@ -134,4 +138,7 @@ const server = http.createServer(async (req, res) => {
 });
 server.requestTimeout = 12000;
 server.headersTimeout = 12000;
-server.listen(PORT, '0.0.0.0', () => console.log(`Probe listening on ${PORT}; boot ${bootId}; DIAG_TOKEN set: ${Boolean(DIAG_TOKEN)}`));
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`Probe listening on ${PORT}; boot ${bootId}; DIAG_TOKEN set: true; generated: ${generatedToken}`);
+  if (generatedToken) console.log(`TEMPORARY_DIAG_TOKEN_FOR_PRIVATE_LOGS_ONLY=${DIAG_TOKEN}`);
+});
